@@ -1,0 +1,8 @@
+v 1
+d robhdfe: Stata program for robust high-dimensional fixed effects estimation with clustered standard errors
+d 
+d Author: David Veenman, University of Amsterdam, d.veenman@uva.nl
+d
+d Distribution-Date: 20260324
+f robhdfe.ado
+f robhdfe.sthlp

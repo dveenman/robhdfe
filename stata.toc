@@ -1,0 +1,2 @@
+v 1
+p robhdfe Stata program for robust high-dimensional fixed effects estimation with clustered standard errors
