@@ -413,7 +413,6 @@ program define robhdfe, eclass sortpreserve
 	if "`cluster'"!="" {
 		if `nc'==1 {
 			ereturn scalar N_clust=`nclusterdim'
-			di "HALLO"
 		}
 		else {
 			ereturn scalar N_clust1=`nclusterdim1'
