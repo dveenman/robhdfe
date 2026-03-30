@@ -1,3 +1,6 @@
+//////////////////////////////////////////////////
+// Test based on simulated data:
+//////////////////////////////////////////////////
 clear all
 set obs 1000
 set seed 1234567
@@ -30,12 +33,14 @@ robreg m y i.year x x2, ivar(firm) cluster(group) eff(95)
 robhdfe m y x x2, absorb(firm year) cluster(group) eff(95) 
 robhdfe m y x x2, absorb(firm year) cluster(group year) eff(95)
 
-drop if _n<10
+drop if _n<10 // Create singleton observation
 robhdfe m y x x2, absorb(firm year) cluster(group) eff(95) 
 robhdfe m y x x2, absorb(firm year) cluster(group) eff(95) keepsin
 
 
-
+//////////////////////////////////////////////////
+// Test based on external data:
+//////////////////////////////////////////////////
 clear all
 sysuse auto, clear
 reghdfe price weight length, absorb(rep78) 
@@ -44,9 +49,11 @@ robhdfe m price weight length, absorb(rep78) eff(95)
 robreg m price weight length, ivar(rep78) cluster(rep78) eff(95) 
 robhdfe m price weight length, absorb(rep78) cluster(rep78) eff(95) 
 
-
-
 clear all
 webuse nlswork, clear
-reghdfe ln_w grade age ttl_exp tenure not_smsa south , absorb(idcode year) cluster(idcode) 
+reghdfe ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode) 
 robhdfe m ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode) eff(95) 
+
+reghdfe ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode) resid
+robhdfe m ln_w grade age ttl_exp tenure not_smsa south if _reghdfe_resid!=., absorb(idcode year) cluster(idcode) eff(95) 
+robreg m ln_w i.year grade age ttl_exp tenure not_smsa south if _reghdfe_resid!=., ivar(idcode) cluster(idcode) eff(95) 
