@@ -22,7 +22,7 @@
 {cmd:robhdfe} {it:subcommand} {depvar} {indepvars} {ifin}
 [{cmd:,} {it:options}]
 
-{synoptset 20 tabbed}{...}
+{synoptset 25 tabbed}{...}
 {synopthdr}
 {synoptline}
 {syntab:Required}
@@ -38,7 +38,7 @@
 {p2colreset}{...}
 
 {phang}
-{it:subcommand} must be {cmd:m}, for Huber M-estimation. 
+{it:subcommand} must be {cmd:m} for Huber M-estimation. 
 
 
 {marker description}{...}
@@ -60,11 +60,16 @@
     {help areg} function for the IRWLS step, which similarly allows for the absorption of multiple fixed effect dimensions.
 
 {phang}
+    In settings without singleton observations (i.e., observations with no within-group variation), the program mimics the 
+    functionality of the {cmd:robreg} package when combined with the ivar() to absorb a single fixed effect dimension. Similar to
+    {cmd:reghdfe}, the default is that singleton observations are dropped.
+
+{phang}
     Standard errors can be clustered to account for dependence within (up to two) groups. Degrees-of-freedom and finite-sample 
     corrections follow the implementation in {cmd:reghdfe}.
 
 {phang}
-    This command requires the {cmd:moremata}, {cmd:reghdfe}, and {cmd:hdfe} packages.
+    This command requires the {cmd:moremata}, {cmd:reghdfe}, and {cmd:hdfe} packages to be installed.
 
 
 {marker options}{...}
@@ -100,18 +105,37 @@
 {marker examples}{...}
 {title:Examples}
 
-{pstd}Basic usage with single fixed effect:{p_end}
-{phang2}{cmd:. sysuse auto, clear}{p_end}
-{phang2}{cmd:. reghdfe price weight length, absorb(rep78)}{p_end}
-{phang2}{cmd:. robhdfe m price weight length, absorb(rep78) eff(95)}{p_end}
+{pstd}
+    Basic usage with single fixed effect:
 
-{pstd}With multiple fixed effects and clustering:{p_end}
-{phang2}{cmd:. webuse nlswork, clear}{p_end}
-{phang2}{cmd:. reghdfe ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode)}{p_end}
-{phang2}{cmd:. robhdfe m ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode) eff(95)}{p_end}
+        . {stata sysuse auto, clear}
+        . {stata reghdfe price weight length, absorb(rep78)}
+        . {stata robhdfe m price weight length, absorb(rep78) eff(95)}
 
-{pstd}Storing robust regression weights:{p_end}
-{phang2}{cmd:. robhdfe m ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode) eff(95) weightvar(w95)}{p_end}
+
+{pstd}
+    With multiple fixed effects and clustering:
+
+        . {stata webuse nlswork, clear}
+        . {stata reghdfe ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode)}
+        . {stata robhdfe m ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode) eff(95)}
+        . {stata robhdfe m ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode) eff(95) keepsin}
+
+
+{pstd}
+    Storing robust regression weights:
+
+        . {stata webuse nlswork, clear}
+        . {stata robhdfe m ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode) eff(95) weightvar(w95)}
+
+
+{pstd}
+    Comparison with {cmd:robreg} combined with ivar() option:
+
+        . {stata webuse nlswork, clear}
+        . {stata reghdfe ln_w grade age ttl_exp tenure not_smsa south, absorb(idcode year) cluster(idcode) resid}
+        . {stata robreg m ln_w i.year grade age ttl_exp tenure not_smsa south if _reghdfe_resid!=., ivar(idcode) cluster(idcode) eff(95)}                
+        . {stata robhdfe m ln_w grade age ttl_exp tenure not_smsa south if _reghdfe_resid!=., absorb(idcode year) cluster(idcode) eff(95)}
 
 
 {marker results}{...}
