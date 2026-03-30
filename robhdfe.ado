@@ -1,7 +1,7 @@
-*! version 1.0.0 2026XXXX David Veenman
+*! version 1.0.0 20260330 David Veenman
 
 /*
-2026XXXX: 1.0.0     First version
+20260330: 1.0.0     First version
 
 Dependencies:
    moremata
@@ -25,8 +25,6 @@ program define robhdfe, eclass sortpreserve
 		error 499
 	}
 	
-	local stataversion=_caller()
-	
 	capt findfile hdfe.ado 
 	if _rc {
 		di as error "Program requires the {bf:hdfe} package: type {stata ssc install hdfe, replace}"
@@ -38,7 +36,7 @@ program define robhdfe, eclass sortpreserve
 	tokenize `anything'
 	local subcmd `"`1'"'
 
-	local cmdlist "m mm"
+	local cmdlist "m"
 	if !`:list subcmd in cmdlist' {
 		di as err `"Invalid subcommand: `subcmd'"'
 		exit 
@@ -199,6 +197,7 @@ program define robhdfe, eclass sortpreserve
 		qui ren _stub_`v' `v'
 	}
 	_rmcoll `indepv'
+	local k_omitted2=r(k_omitted)
 	local indepv_temp=r(varlist)
 	foreach v of local indepv {
 		drop `v'
@@ -209,7 +208,10 @@ program define robhdfe, eclass sortpreserve
 	
 	// Location stage MM-QR (Machado and Santos Silva 2019)
 	tempvar e Ipos r_raw denom u resid_tau
-
+	capture sum _reghdfe_resid
+	if (_rc==0) {
+		ren _reghdfe_resid _temp_reghdfe_resid
+	}
 	qui sum `touse' if `touse'>0
     local N0=r(N)
 	qui capture reghdfe `depv' `indepv' if `touse', absorb(`absorb') dof(none) notable nofootnote noheader resid `keepsin'
@@ -272,14 +274,15 @@ program define robhdfe, eclass sortpreserve
 		local ntotal_est = `ntotal_est' + `n`j'_est'
 	}	
 	local Kinit: word count `indepv' 
-	local Kinit = `Kinit' - `k_omitted'
+	local Kinit = `Kinit' - `k_omitted' 
 	if (`nabs'>1) {
 		scalar df_initial=`N'-`ntotal'-(`Kinit'-1) 
 	}
 	else {
 		scalar df_initial=`N'-`ntotal'-`Kinit' 
 	}
-	local K = `Kinit' - `k_omitted' + 1 + `ntotal_est'
+	local K: word count `indepv'
+	local K = `K' - `k_omitted2' + 1 + `ntotal_est'
 
 	// Get scale estimate and initial weights:
 	tempvar w 
@@ -298,7 +301,7 @@ program define robhdfe, eclass sortpreserve
     forvalues i=1(1)`maxiter'{
         if `diff'>`tolerance' {
 			qui capture drop `_resid_temp'
-			if (`stataversion'<19) {
+			if (_caller()<19) {
 				qui capture reghdfe `depv' `indepv' [aw = `w'] if `touse', absorb(`absorb') dof(none) notable nofootnote noheader resid keepsin
 				qui ren _reghdfe_resid `_resid_temp' 
 			}
@@ -467,6 +470,11 @@ program define robhdfe, eclass sortpreserve
 	
 	matrix drop beta Vc Vclust b b0  
 	scalar drop df_initial eff mata_nclusters scale krob r2_p mu maxiter qhat Ibar k0
+
+	capture sum _temp_reghdfe_resid
+	if (_rc==0) {
+		ren _temp_reghdfe_resid _reghdfe_resid 
+	}
 	
 end
 
@@ -479,6 +487,16 @@ end
 mata:
 	mata clear
 	void _vce_cluster() {
+
+		// Input variables:
+		real matrix y, Xr, r, cvar
+		real scalar scale, krob, mu, k, n, nc, nocluster
+		
+		// New variables:
+		real vector z, psi, phi, psii, z0, rho, rho0, psi2
+		real scalar i, r2_p
+		real matrix XphiXinv, info, M, xi, Vclust
+ 
 		st_view(y=., ., st_local("depv"), st_local("touse"))
 		st_view(Xr=., ., tokens(st_local("indepvr")), st_local("touse"))
 		st_view(r=., ., tokens(st_local("_resid_temp")), st_local("touse"))
@@ -486,10 +504,11 @@ mata:
 		scale=st_numscalar("scale")		
 		krob=st_numscalar("krob")
 		mu=st_numscalar("mu")
-		nocluster=st_local("nocluster")
+		nocluster=(st_local("nocluster")!="")
 		
 		// Process input:
 		k=cols(Xr)
+		n=rows(r)
 		z=r:/scale
 		psi=mm_huber_psi(z,krob)
 		phi=mm_huber_phi(z,krob)	
@@ -498,8 +517,7 @@ mata:
 		XphiXinv=invsym(quadcross(Xr,phi,Xr))
 		info=panelsetup(cvar, 1)
         nc=rows(info)
-		n=rows(r)
-		if (nocluster!="") {
+		if (nocluster==1) {
 			nc=n
 		}
         M=J(k,k,0)
@@ -533,7 +551,11 @@ mata:
 	}
 	    
 	void _scale_initial() {
-        st_view(e=., ., tokens(st_local("resid_tau")), st_local("touse"))
+
+		real vector e, z, w
+		real scalar df, eff, n, p, scale, krob
+	
+		st_view(e=., ., tokens(st_local("resid_tau")), st_local("touse"))
         df=st_numscalar("df_initial")
 		eff=st_numscalar("eff")
         n=rows(e)
@@ -548,7 +570,11 @@ mata:
 	}
 	
 	void _update_weights() {
-        z = st_data(., "_z_temp")
+
+		real vector z, phi, w
+		real scalar eff, krob
+	
+		z = st_data(., "_z_temp")
 		eff=st_numscalar("eff")
 		krob=mm_huber_k(eff)
 		phi=mm_huber_phi(z,krob)			
@@ -559,6 +585,10 @@ mata:
     }
 
 	void _huber_location() {
+
+		real vector y, u, w
+		real scalar eff, maxiter, tol, k, mu, mu_new, n, df, p, scale, i
+	
 		st_view(y=., ., tokens(st_local("depv")), st_local("touse"))
 		eff=st_numscalar("eff")
 		maxiter=st_numscalar("maxiter")
