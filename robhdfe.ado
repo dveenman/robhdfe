@@ -1,7 +1,7 @@
-*! version 1.0.0 20260330 David Veenman
+*! version 1.0.0 20260331 David Veenman
 
 /*
-20260330: 1.0.0     First version
+20260331: 1.0.0     First version
 
 Dependencies:
    moremata
@@ -405,6 +405,7 @@ program define robhdfe, eclass sortpreserve
 	matrix colnames Vc=`indepv'
 	matrix rownames Vc=`indepv'
     matrix colnames beta=`indepv'	
+	matrix rownames beta=`depv'
 	
 	matrix `b'=beta
 	matrix `V'=Vc
@@ -423,6 +424,11 @@ program define robhdfe, eclass sortpreserve
 		}
 	}
 	ereturn scalar scale=scale 
+    ereturn local depvar "`depv'"
+    ereturn local indepvars "`indepv'"
+    ereturn local cmd "robhdfe"
+    ereturn local subcmd "`subcmd'"
+    ereturn local clustvar "`cluster'"
 	
 	di ""
 	di in green "Huber M-estimation with `eff'% normal efficiency and fixed effects"
