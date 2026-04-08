@@ -1,16 +1,5 @@
 {smcl}
-{* *! version 1.0.0 2026XXXX David Veenman}{...}
-{vieweralsosee "[R] regress" "help regress"}{...}
-{vieweralsosee "[R] reghdfe" "help reghdfe"}{...}
-{vieweralsosee "" "--"}{...}
-{vieweralsosee "[R] robreg" "help robreg"}{...}
-{viewerjumpto "Syntax" "robhdfe##syntax"}{...}
-{viewerjumpto "Description" "robhdfe##description"}{...}
-{viewerjumpto "Options" "robhdfe##options"}{...}
-{viewerjumpto "Examples" "robhdfe##examples"}{...}
-{viewerjumpto "Stored results" "robhdfe##results"}{...}
-{viewerjumpto "References" "robhdfe##references"}{...}
-{viewerjumpto "Author" "robhdfe##author"}{...}
+{* *! version 1.0.0 20260408 David Veenman}{...}
 {title:Title}
 
 {pstd}{hi:robhdfe} {hline 2} Robust high-dimensional fixed effects estimation with clustered standard errors
@@ -34,6 +23,7 @@
 {synopt :{opt tolerance(real)}}tolerance for convergence (default 1e-10){p_end}
 {synopt :{opt weightvar(varname)}}store robust weights in specified variable{p_end}
 {synopt :{opt keepsin}}do not drop singleton observations{p_end}
+{synopt :{opt julia}}use Julia implementation for speed improvements in large samples{p_end}
 {synoptline}
 {p2colreset}{...}
 
@@ -101,6 +91,12 @@
     their residuals are effectively zero and not informative about the dispersion of the true error distribution. As a result, retaining 
     these observations leads to a downward bias in the scale estimate. 
 
+{phang}
+    {opt julia} specifies that the Julia implementation is used for the internal fixed effects estimations. This option requires a Julia installation, 
+    as well as working {help julia} and {help reghdfejl} packages in Stata. For multidimensional fixed effects in large datasets (e.g., >1 million observations), 
+    using this option can bring down estimation time significantly. To make this option work, the user should first ensure the {cmd: reghdfejl} package works 
+    properly. First-time use in a Stata session can be accompanied by a significant initial delay, which is offset by subsequent speed gains for large datasets. See 
+    {help reghdfejl} and Roodman (2025) for more details. 
 
 {marker examples}{...}
 {title:Examples}
@@ -179,6 +175,9 @@ Machado, J.A.F., Santos Silva, J.M.C. (2019). Quantiles Via Moments. {it:Journal
 {phang}
 Rios Avila, F., Siles, L., Canavire-Bacarreza, G.J. (2024). Estimating Quantile Regressions with Multiple Fixed Effects Through Method of Moments. {browse "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4944894"}.
 
+{phang}
+Roodman, D. (2025). Julia as a Universal Platform for Statistical Software Development. {it:The Stata Journal}, 25(2), 255-284.
+
 {marker author}{...}
 {title:Author}
 
@@ -188,5 +187,7 @@ David Veenman{p_end}
 Amsterdam Business School, University of Amsterdam{p_end}
 {pstd}
 d.veenman@uva.nl{p_end}
-
+{pstd}
+{pstd}
+See {browse "https://github.com/dveenman/robhdfe/"} for the latest version.
 
