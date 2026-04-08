@@ -1,7 +1,7 @@
-*! version 1.0.0 20260331 David Veenman
+*! version 1.0.0 20260408 David Veenman
 
 /*
-20260331: 1.0.0     First version
+20260408: 1.0.0     First version
 
 Dependencies:
    moremata
@@ -11,7 +11,7 @@ Dependencies:
 
 program define robhdfe, eclass sortpreserve
 	version 15
-	syntax [anything] [in] [if], absorb(varlist) eff(real) [cluster(varlist) tol(real 0) weightvar(str) keepsin]
+	syntax [anything] [in] [if], absorb(varlist) eff(real) [cluster(varlist) tol(real 0) weightvar(str) keepsin julia]
 
 	capt findfile mf_mm_aqreg.hlp
 	if _rc {
@@ -31,6 +31,19 @@ program define robhdfe, eclass sortpreserve
 		error 499
 	}
 
+	if "`julia'"!="" {
+		capt findfile reghdfejl.ado 
+		if _rc {
+			di as error "Program requires the {bf:reghdfejl} package: type {stata ssc install reghdfejl, replace}"
+			error 499
+		}
+		capt findfile jl.ado 
+		if _rc {
+			di as error "Program requires the {bf:julia} package: type {stata ssc install julia, replace}"
+			error 499
+		}		
+	}
+	
 	marksample touse
 		
 	tokenize `anything'
@@ -190,7 +203,12 @@ program define robhdfe, eclass sortpreserve
 	/////////////////////////////////////////////////////////////////////////////////////////
 
 	// Checking collinearity with fixed effects:
-	qui hdfe `indepv' if `touse', absorb(`absorb') gen(_stub_) keepsin
+	if "`julia'"!="" {
+		qui partialhdfejl `indepv' if `touse', absorb(`absorb') prefix(_stub_)
+	}
+	else {
+		qui hdfe `indepv' if `touse', absorb(`absorb') gen(_stub_) keepsin
+	}
 	foreach v of local indepv {
 		tempvar `v'_temp
 		qui ren `v' `v'_temp
@@ -208,18 +226,34 @@ program define robhdfe, eclass sortpreserve
 	
 	// Location stage MM-QR (Machado and Santos Silva 2019)
 	tempvar e Ipos r_raw denom u resid_tau
-	capture sum _reghdfe_resid
-	if (_rc==0) {
-		ren _reghdfe_resid _temp_reghdfe_resid
+
+	if "`julia'"!="" {
+		capture drop _reghdfejl_*
 	}
+	else {
+		capture sum _reghdfe_resid
+		if (_rc==0) {
+			ren _reghdfe_resid _temp_reghdfe_resid
+		}
+	}
+	
 	qui sum `touse' if `touse'>0
     local N0=r(N)
-	qui capture reghdfe `depv' `indepv' if `touse', absorb(`absorb') dof(none) notable nofootnote noheader resid `keepsin'
-	markout `touse' _reghdfe_resid
+	if "`julia'"!="" {
+		qui capture reghdfejl `depv' `indepv' if `touse', absorb(`absorb') notable nofootnote noheader resid `keepsin'
+		qui predict _reghdfejl_res, res
+		markout `touse' _reghdfejl_res
+		qui ren _reghdfejl_res `e'
+		drop _reghdfejl_*
+	}
+	else {
+		qui capture reghdfe `depv' `indepv' if `touse', absorb(`absorb') dof(none) notable nofootnote noheader resid `keepsin'
+		markout `touse' _reghdfe_resid
+		qui ren _reghdfe_resid `e'
+	}
+	
 	qui sum `touse' if `touse'>0
     local N=r(N)
-	
-	qui ren _reghdfe_resid `e'
 	
 	if "`keepsin'"!="" {
 		qui replace `e'=0 if abs(`e')<1e-10
@@ -242,9 +276,16 @@ program define robhdfe, eclass sortpreserve
 	scalar Ibar = r(mean)
 	qui gen double `r_raw' = 2*`e'*(`Ipos' - Ibar) if `touse'
 	
-	qui capture reghdfe `r_raw' `indepv' if `touse', absorb(`absorb') dof(none) notable nofootnote noheader resid `keepsin'  
-	qui predict double `denom' if `touse', xbd
-	drop _reghdfe_resid
+	if "`julia'"!="" {
+		qui capture reghdfejl `r_raw' `indepv' if `touse', absorb(`absorb') notable nofootnote noheader resid `keepsin'  
+		qui predict double `denom' if `touse', xbd
+		drop _reghdfejl_*
+	}
+	else {
+		qui capture reghdfe `r_raw' `indepv' if `touse', absorb(`absorb') dof(none) notable nofootnote noheader resid `keepsin'  
+		qui predict double `denom' if `touse', xbd
+		drop _reghdfe_resid
+	}
 	
 	// Standardized residuals and create qhat:
 	qui gen double `u' = `e'/`denom' if `touse'
@@ -298,22 +339,50 @@ program define robhdfe, eclass sortpreserve
 	qui gen double `phi'=.
     local diff=100
 	local maxiter=c(maxiter)
+	
+	// Julia setup - transfer variables and build formula:
+	if "`julia'"!="" {
+		reghdfejl_load
+		reghdfejl_parse_absorb `absorb' if `touse'
+		local jl_feterms `"`r(feterms)'"'
+		local jl_absorbvars `r(absorbvars)'
+		local jl_putvars `depv' `indepv' `w' `jl_absorbvars'
+		local jl_putvars: list uniq jl_putvars
+		unab jl_putvars: `jl_putvars'
+		jl PutVarsToDF `jl_putvars' if `touse', nomissing doubleonly nolabel
+		local jl_indepfmla: subinstr local indepv " " " + ", all
+		_jl: jl_f = @formula(`depv' ~ `jl_indepfmla' `jl_feterms')
+	}
+	
     forvalues i=1(1)`maxiter'{
         if `diff'>`tolerance' {
 			qui capture drop `_resid_temp'
-			if (_caller()<19) {
-				qui capture reghdfe `depv' `indepv' [aw = `w'] if `touse', absorb(`absorb') dof(none) notable nofootnote noheader resid keepsin
-				qui ren _reghdfe_resid `_resid_temp' 
+			if "`julia'"!="" {
+				_jl: df[!, :`w'] = vec(st_data("`w'", "`touse'"))
+				_jl: m = reg(df, jl_f, weights = :`w', drop_singletons=false, save=:residuals, maxiter=16000, tol=1e-8)
+				_jl: res = residuals(m); replace!(res, missing=>NaN)
+				qui jl GetVarsFromMat `_resid_temp' if `touse', source(res)
+				if `i'>1 {
+					_jl: jl_diff = maximum(abs.(coef(m) .- jl_b0)) / max(1.0, maximum(abs.(jl_b0))); st_numscalar("jl_diff", jl_diff)
+					local diff = jl_diff
+				}
+				_jl: jl_b0 = copy(coef(m))				
 			}
 			else {
-				qui capture areg `depv' `indepv' [aw = `w'] if `touse', absorb(`absorb') noabs 
-				qui predict `_resid_temp', res 
+				if (_caller()<19) {
+					qui capture reghdfe `depv' `indepv' [aw = `w'] if `touse', absorb(`absorb') dof(none) notable nofootnote noheader resid keepsin
+					qui ren _reghdfe_resid `_resid_temp' 
+				}
+				else {
+					qui capture areg `depv' `indepv' [aw = `w'] if `touse', absorb(`absorb') noabs 
+					qui predict `_resid_temp', res 
+				}
+				matrix b=e(b)            
+				if `i'>1 {
+					local diff=mreldif(b0,b)
+				}
+				matrix b0=b
 			}
-			matrix b=e(b)            
-            if `i'>1 {
-                local diff=mreldif(b0,b)
-            }
-            matrix b0=b
 			if (`i'==`maxiter' & `diff'>`tolerance'){
 				di as err "ERROR: Convergence not achieved"
 				exit
@@ -325,6 +394,12 @@ program define robhdfe, eclass sortpreserve
 			}
         }
     }
+	
+	if "`julia'"!="" {
+		_jl: jl_b0_mat = reshape(jl_b0, 1, length(jl_b0))
+		jl GetMatFromMat b0, source(jl_b0_mat)
+		matrix b = b0
+	}
 
 	if ("`weightvar'"!="") {
 		capture drop `weightvar'
@@ -333,9 +408,20 @@ program define robhdfe, eclass sortpreserve
 		}
 		gen double `weightvar' = `w' 
 	}
-		
-	qui replace `phi'=1e-20 if `phi'==0 // Ensure that residualized values are also created for phi=0 cases
-	qui hdfe `indepv0' if `touse' [aw = `phi'], absorb(`absorb') gen(_stub_) keepsin
+	
+	mata: ""
+    /////////////////////////////////////////////////////////////////////////////////////////
+	/////////////////////////////////////////////////////////////////////////////////////////
+	di as text "STEP 3: Computing standard errors"
+    /////////////////////////////////////////////////////////////////////////////////////////
+	/////////////////////////////////////////////////////////////////////////////////////////
+	qui replace `phi'=1e-20 if `phi'==0 // Ensure that residualized values are also created for phi=0 cases 
+	if "`julia'"!="" {
+		qui partialhdfejl `indepv0' if `touse' [aw = `phi'], absorb(`absorb') prefix(_stub_)
+	}
+	else {
+		qui hdfe `indepv0' if `touse' [aw = `phi'], absorb(`absorb') gen(_stub_) keepsin
+	}
 	local indepvr ""
 	foreach v of local indepv0 {
 		tempvar _tilde_`v'
@@ -348,13 +434,7 @@ program define robhdfe, eclass sortpreserve
 	scalar maxiter=`maxiter'
 	scalar tol=`tolerance'
 	mata: _huber_location()
-	
-	mata: ""
-    /////////////////////////////////////////////////////////////////////////////////////////
-	/////////////////////////////////////////////////////////////////////////////////////////
-	di as text "STEP 3: Computing standard errors"
-    /////////////////////////////////////////////////////////////////////////////////////////
-	/////////////////////////////////////////////////////////////////////////////////////////
+
 	sort `clus1' 
 	local cvar "`clus1'"	
 	mata: _vce_cluster()    
@@ -479,7 +559,7 @@ program define robhdfe, eclass sortpreserve
 
 	capture sum _temp_reghdfe_resid
 	if (_rc==0) {
-		ren _temp_reghdfe_resid _reghdfe_resid 
+		ren _temp_reghdfe_resid _reghdfe_resid
 	}
 	
 end
@@ -491,7 +571,6 @@ end
 /////////////////////////////////////////////////////////////////////////////////////////
 
 mata:
-	mata clear
 	void _vce_cluster() {
 
 		// Input variables:
