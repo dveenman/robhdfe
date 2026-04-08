@@ -4,7 +4,7 @@
 clear all
 set seed 1234567
 
-local firms 50000
+local firms 10000
 local periods 100
 local groups 50
 local obs=`firms'*`periods'

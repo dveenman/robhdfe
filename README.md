@@ -47,7 +47,6 @@ robhdfe m y x x2, absorb(firm period) cluster(group period) eff(95) julia
 The following example illustrates the standard output and speed of the program (the program can be tested using the `test_robhdfe.do` file):
 
 ![](docs/images/screenshot1.png)
-
 ![](docs/images/screenshot2.png)
 
 
