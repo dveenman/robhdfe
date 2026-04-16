@@ -4,8 +4,8 @@
 clear all
 set seed 1234567
 
-local firms 10000
-local periods 100
+local firms 100
+local periods 10
 local groups 50
 local obs=`firms'*`periods'
 set obs `obs'
@@ -33,21 +33,23 @@ panelframe
 
 timer clear
 timer on 1
-robreg m y i.period x x2, ivar(firm) cluster(group) eff(95)
+robhdfe m y x x2, absorb(firm period) cluster(group) eff(95) 
 timer off 1
 
 timer on 2
-robhdfe m y x x2, absorb(firm period) cluster(group) eff(95) 
+robhdfe m y x x2, absorb(firm period) cluster(group) eff(95) python
 timer off 2
 
 timer on 3
 robhdfe m y x x2, absorb(firm period) cluster(group) eff(95) julia
 timer off 3
 
-// Time for robreg:
-timer list 1
+timer list
 
 // Time for robhdfe:
+timer list 1
+
+// Time for robhdfe/python:
 timer list 2
 
 // Time for robhdfe/julia:

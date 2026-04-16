@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 1.0.0 20260408 David Veenman}{...}
+{* *! version 1.1.0 20260416 David Veenman}{...}
 {title:Title}
 
 {pstd}{hi:robhdfe} {hline 2} Robust high-dimensional fixed effects estimation with clustered standard errors
@@ -23,6 +23,7 @@
 {synopt :{opt tolerance(real)}}tolerance for convergence (default 1e-10){p_end}
 {synopt :{opt weightvar(varname)}}store robust weights in specified variable{p_end}
 {synopt :{opt keepsin}}do not drop singleton observations{p_end}
+{synopt :{opt python}}use Python (pyfixest) for speed improvements in large samples{p_end}
 {synopt :{opt julia}}use Julia implementation for speed improvements in large samples{p_end}
 {synoptline}
 {p2colreset}{...}
@@ -92,6 +93,12 @@
     these observations leads to a downward bias in the scale estimate. 
 
 {phang}
+    {opt python} specifies that the Python pyfixest package is used for speed gains in large samples. This option relies on Stata's  
+    built-in Python integration. It requires a separate Python installation and the pyfixest package to be installed in Python. First-time 
+    use in a Stata session can be accompanied by a small initial delay, which is offset by subsequent speed gains for large datasets. This 
+    option cannot be combined with option {opt keepsin}, i.e., singletons are always dropped.
+
+{phang}
     {opt julia} specifies that the Julia implementation is used for the internal fixed effects estimations. This option requires a Julia installation, 
     as well as working {help julia} and {help reghdfejl} packages in Stata. For multidimensional fixed effects in large datasets (e.g., >1 million observations), 
     using this option can bring down estimation time significantly. To make this option work, the user should first ensure the {cmd: reghdfejl} package works 
@@ -143,12 +150,13 @@
 {synoptset 20 tabbed}{...}
 {p2col 5 20 24 2: Scalars}{p_end}
 {synopt:{cmd:e(N)}}number of observations{p_end}
-{synopt:{cmd:e(df_r)}}residual degrees of freedom{p_end}
-{synopt:{cmd:e(r2_p)}}pseudo R-squared{p_end}
-{synopt:{cmd:e(scale)}}robust scale estimate{p_end}
+{synopt:{cmd:e(N_singletons)}}number of singleton observations dropped (if any){p_end}
 {synopt:{cmd:e(N_clust)}}number of clusters (if clustered){p_end}
 {synopt:{cmd:e(N_clust1)}}number of clusters in first dimension (if double-clustered){p_end}
 {synopt:{cmd:e(N_clust2)}}number of clusters in second dimension (if double-clustered){p_end}
+{synopt:{cmd:e(df_r)}}residual degrees of freedom{p_end}
+{synopt:{cmd:e(r2_p)}}pseudo R-squared{p_end}
+{synopt:{cmd:e(scale)}}robust scale estimate{p_end}
 
 {synoptset 20 tabbed}{...}
 {p2col 5 20 24 2: Matrices}{p_end}
@@ -164,7 +172,7 @@
 Correia, S. (2017). Linear Models with High-Dimensional Fixed Effects: An Efficient and Feasible Estimator. {browse "http://scorreia.com/research/hdfe.pdf"}.
 
 {phang}
-Gassen, J., Veenman, D. (2026) Estimation Precision and Robust Estimation in Archival Research. {browse "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4975569"}.
+Gassen, J., Veenman, D. (2026) Estimation Precision and Robust Estimation in Archival Research. {it: Journal of Accounting & Economics, forthcoming} {browse "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4975569"}.
 
 {phang}
 Huber, P.J. (1964). Robust Estimation of a Location Parameter. {it:Annals of Mathematical Statistics}, 35(1), 73-101.
