@@ -1,6 +1,6 @@
 # robhdfe: Robust Huber M-estimation with high-dimensional fixed effects
 
-This Stata package combines robust regression estimation (Huber M) with high-dimensional fixed effects and clustered standard errors. The program accompanies the Gassen & Veenman (2026) study on ["Estimation Precision and Robust Inference in Archival Research''](https://ssrn.com/abstract=6569958), forthcoming in the Journal of Accounting & Economics. The accompanying R package `ferols` can be found at https://github.com/joachim-gassen/ferols.
+This Stata package combines robust regression estimation (Huber M) with high-dimensional fixed effects and clustered standard errors. The package accompanies the Gassen & Veenman (2026) study on ["Estimation Precision and Robust Inference in Archival Research''](https://doi.org/10.1016/j.jacceco.2026.101895) in the Journal of Accounting & Economics. The accompanying R package `ferols` can be found at https://github.com/joachim-gassen/ferols.
 
 ---
 

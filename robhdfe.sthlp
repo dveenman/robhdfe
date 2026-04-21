@@ -172,7 +172,7 @@
 Correia, S. (2017). Linear Models with High-Dimensional Fixed Effects: An Efficient and Feasible Estimator. {browse "http://scorreia.com/research/hdfe.pdf"}.
 
 {phang}
-Gassen, J., Veenman, D. (2026) Estimation Precision and Robust Estimation in Archival Research. {it: Journal of Accounting & Economics, forthcoming} {browse "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4975569"}.
+Gassen, J., Veenman, D. (2026) Estimation Precision and Robust Estimation in Archival Research. {it: Journal of Accounting & Economics, forthcoming}. {browse "https://doi.org/10.1016/j.jacceco.2026.101895"}.
 
 {phang}
 Huber, P.J. (1964). Robust Estimation of a Location Parameter. {it:Annals of Mathematical Statistics}, 35(1), 73-101.
