@@ -1,6 +1,7 @@
-*! version 1.1.0 20260416 David Veenman
+*! version 1.1.1 20260429 David Veenman
 
 /*
+20260429: 1.1.1     Fixed minor bug when using keepsin option (error because of missing Ndrop scalar)
 20260416: 1.1.0     Added python option in IRWLS for faster execution with pyfixest
                     Fixed minor collinearity effects and aligned convergence criterian for julia option
 20260408: 1.0.0     First version
@@ -305,6 +306,7 @@ program define robhdfe, eclass sortpreserve
 	
 	if ("`keepsin'" != "") {
 		qui replace `e'=0 if abs(`e')<1e-10
+		local Ndrop = 0	
 	}
 	else {
 		if (`N' < `N0') {
