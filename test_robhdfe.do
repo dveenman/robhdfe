@@ -61,6 +61,8 @@ drop if _n<r(max)
 robhdfe m y x x2, absorb(firm period) cluster(group) eff(95) 
 robhdfe m y x x2, absorb(firm period) cluster(group) eff(95) keepsin
 
+// Driscoll-Kraay standard errors:
+robhdfe m y x x2, absorb(firm period) dkraay(period 4) eff(95) 
 
 //////////////////////////////////////////////////
 // Test based on external data:

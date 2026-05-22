@@ -1,6 +1,7 @@
-*! version 1.1.1 20260429 David Veenman
+*! version 1.2.0 20260522 David Veenman
 
 /*
+20260522: 1.2.0     Added option for Driscoll-Kraay standard errors for spatial dependence
 20260429: 1.1.1     Fixed minor bug when using keepsin option (error because of missing Ndrop scalar)
 20260416: 1.1.0     Added python option in IRWLS for faster execution with pyfixest
                     Fixed minor collinearity effects and aligned convergence criterian for julia option
@@ -16,7 +17,7 @@ Dependencies (other Stata packages):
 
 program define robhdfe, eclass sortpreserve
 	version 15
-	syntax [anything] [in] [if], absorb(varlist) eff(real) [cluster(varlist) tol(real 0) weightvar(str) keepsin julia python]
+	syntax [anything] [in] [if], absorb(varlist) eff(real) [cluster(varlist) dkraay(string) tol(real 0) weightvar(str) keepsin julia python]
 
 	capture findfile mf_mm_aqreg.hlp
 	if _rc {
@@ -148,6 +149,51 @@ program define robhdfe, eclass sortpreserve
 		}
 	}
 	
+	// Process information in dkraay() option:
+	local dkn: word count `dkraay'
+	if ("`dkraay'" != "" & `dkn' != 2) {
+		di as err "ERROR: Option dkraay() incorrectly specified"
+		exit 198
+	}
+	if ("`dkraay'"!="") {
+		if ("`cluster'" != "") {
+			di as err "ERROR: Options cluster() and dkraay() may not be combined"
+			exit 
+		}
+		// Time dimension:
+		local dk_time: word 1 of `dkraay'
+		capture confirm variable `dk_time'
+		if _rc {
+			di as err "ERROR: Time variable `dk_time' in option dkraay() not found"
+			exit
+		}
+		capture confirm numeric variable `dk_time'
+		if _rc {
+			di as err "ERROR: Time variable `dk_time' in option dkraay() not numeric"
+			exit
+		}
+		markout `touse' `dk_time'
+		tempvar dk_time_id
+		qui egen double `dk_time_id' = group(`dk_time') if `touse'
+		// Number of lags:
+		local dk_lags: word 2 of `dkraay'
+		capture confirm integer number `dk_lags'
+		if _rc {
+			di as err "ERROR: Lag length in option dkraay() must be integer"
+			exit
+		}
+		if (`dk_lags' < 1) {
+			di as err "ERROR: Lag length in option dkraay() must be positive"
+			exit			
+		}
+		scalar dk_lags = `dk_lags'
+		qui sum `dk_time_id'
+		if r(max) < dk_lags {
+			di as err "ERROR: Lag length in option dkraay() must be smaller than number of time periods"
+			exit						
+		}
+	}
+	
 	// Process information in cluster() option:
 	local nc: word count `cluster'
 	
@@ -160,9 +206,10 @@ program define robhdfe, eclass sortpreserve
 	
 	// Check nesting of FE in clusters and create indicators for dof adjustments:
 	local allnest=1
-	if ("`cluster'" == "") {
+	local j = 0
+	local all1 = 1
+	if ("`cluster'" == "" & "`dkraay'" == "") {
 		local nocluster = 1
-		local j = 0
 		foreach abs of local absorb {
 			local `j++'
 			local nest`j' = 1		
@@ -171,25 +218,39 @@ program define robhdfe, eclass sortpreserve
 		local nest1dof = 0
 	}
 	else {
-		local j = 0
-		local all1 = 1
-		foreach abs of local absorb {
-			local `j++'
-			local nest`j' = 1
-			foreach cl of local cluster {
-				capture bysort `abs': assert `cl'==`cl'[1] if !missing(`abs', `cl')
+		if ("`cluster'" != "") {
+			foreach abs of local absorb {
+				local `j++'
+				local nest`j' = 1
+				foreach cl of local cluster {
+					capture bysort `abs': assert `cl'==`cl'[1] if !missing(`abs', `cl')
+					if (_rc == 0) {
+						local nest`j' = 0
+						continue, break
+					}
+				}			
+				local nest`j'dof = `nest`j''
+				local all1 = `all1' * `nest`j'dof'
+				local allnest = `allnest' * `nest`j''
+			}
+		}
+		if ("`dkraay'" != "") { // Currently redundant as small-sample correction uses full K only as in fixest
+			foreach abs of local absorb {
+				local `j++'
+				local nest`j' = 1
+				capture bysort `abs': assert `dk_time'==`dk_time'[1] if !missing(`abs', `dk_time')
 				if (_rc == 0) {
 					local nest`j' = 0
-					continue, break
 				}
-			}			
-			local nest`j'dof = `nest`j''
-			local all1 = `all1' * `nest`j'dof'
-			local allnest = `allnest' * `nest`j''
+				local nest`j' = 1 // Override for consistency with fixest
+				local nest`j'dof = `nest`j''
+				local all1 = `all1' * `nest`j'dof'
+				local allnest = `allnest' * `nest`j''
+			}
 		}
 		if (`all1' == 1) {
 			local nest1dof = 0
-		}
+		}		
 	}
 		
 	// Set tolerance:
@@ -207,12 +268,17 @@ program define robhdfe, eclass sortpreserve
 	}
 		
 	// Create temporary variables: 
-	tempvar clus1 
-	qui egen double `clus1' = group(`clusterdim1') if `touse'
-	if (`nc'>1){
-		tempvar clus2 clus12
-		qui egen double `clus2' = group(`clusterdim2') if `touse'
-		qui egen double `clus12' = group(`clusterdim1' `clusterdim2') if `touse'
+	tempvar clus1
+	if ("`cluster'" != "") {
+		qui egen double `clus1' = group(`clusterdim1') if `touse'
+		if (`nc'>1){
+			tempvar clus2 clus12
+			qui egen double `clus2' = group(`clusterdim2') if `touse'
+			qui egen double `clus12' = group(`clusterdim1' `clusterdim2') if `touse'
+		}
+	}
+	else {
+		 qui gen double `clus1' = 1 if `touse'
 	}
 			
 	// Checking collinearity (including fixed effects):
@@ -376,7 +442,10 @@ program define robhdfe, eclass sortpreserve
 		scalar df_initial = `N' - `ntotal' - `Kinit' 
 	}
 	local K = `Kinit' + 1 + `ntotal_est'
-
+	if ("`dkraay'" != "") {
+		local K_dk_full = `Kinit' + `ntotal' - `nabs' + 1
+	}
+	
 	// Get scale estimate and initial weights:
 	tempvar w 
 	scalar eff = `eff'
@@ -552,50 +621,67 @@ program define robhdfe, eclass sortpreserve
 		}
 	}
 
-	// For calculation of Pseudo R2:
+	// Calculation of Pseudo R2:
 	scalar maxiter = `maxiter'
 	scalar tol = `tolerance'
 	mata: _huber_location()
-
-	sort `clus1' 
-	local cvar "`clus1'"	
-	mata: _vce_cluster()    
-	local nclusterdim = mata_nclusters
-	if ("`cluster'" == "") {
-		local e_df_r = df_initial
+	mata: _pseudo_r2()
+	
+	// VCE:
+	if ("`dkraay'" != "") {
+		sort `dk_time_id'
+		local tvar "`dk_time_id'"	
+		mata: _vce_dkraay()
+		matrix beta = b0[.,1..k0]
+		matrix Vc = Vdk
+		local e_df_r = mata_ntime-1
 	}
 	else {
-		local e_df_r = mata_nclusters-1
-	}
-	
-	matrix beta = b0[.,1..k0]
-	matrix Vc = Vclust
-	    	
-	if (`nc' > 1) {
-		// Second clustering dimension:
-		matrix V1 = Vclust
-		sort `clus2' 
-		local cvar "`clus2'"	
-		mata: _vce_cluster()
-		local nclusterdim1 = `nclusterdim'
-		local nclusterdim2 = mata_nclusters
-		local e_df_r2 = mata_nclusters - 1
-		if (`nclusterdim2' < `nclusterdim') {
-			local nclusterdim = `nclusterdim2'
-			local e_df_r = `e_df_r2'
-		}
-		matrix V2 = Vclust
-		// Intersection of clustering dimensions:
-		sort `clus12' 
-		local cvar "`clus12'"	
+		sort `clus1' 
+		local cvar "`clus1'"	
 		mata: _vce_cluster()    
-		matrix V12 = Vclust
-		matrix Vc = V1 + V2 - V12
-		matrix drop V1 V2 V12
-	}		
-			
+		local nclusterdim = mata_nclusters
+		if ("`cluster'" == "") {
+			local e_df_r = df_initial
+		}
+		else {
+			local e_df_r = mata_nclusters-1
+		}
+		
+		matrix beta = b0[.,1..k0]
+		matrix Vc = Vclust
+				
+		if (`nc' > 1) {
+			// Second clustering dimension:
+			matrix V1 = Vclust
+			sort `clus2' 
+			local cvar "`clus2'"	
+			mata: _vce_cluster()
+			local nclusterdim1 = `nclusterdim'
+			local nclusterdim2 = mata_nclusters
+			local e_df_r2 = mata_nclusters - 1
+			if (`nclusterdim2' < `nclusterdim') {
+				local nclusterdim = `nclusterdim2'
+				local e_df_r = `e_df_r2'
+			}
+			matrix V2 = Vclust
+			// Intersection of clustering dimensions:
+			sort `clus12' 
+			local cvar "`clus12'"	
+			mata: _vce_cluster()    
+			matrix V12 = Vclust
+			matrix Vc = V1 + V2 - V12
+			matrix drop V1 V2 V12
+		}		
+	}
+				
 	if ("`cluster'" == "") {
-		local factor = (`N'/`e_df_r')
+		if ("`dkraay'" == "") {
+			local factor = (`N'/`e_df_r')
+		}
+		else {
+			local factor = ((`N' - 1)/(`N' - `K_dk_full'))*(mata_ntime / (mata_ntime-1))
+		}
 	}
 	else{
 		local factor = (`nclusterdim' / (`nclusterdim' - 1))*((`N' - 1)/(`N' - `K'))
@@ -630,6 +716,22 @@ program define robhdfe, eclass sortpreserve
 	ereturn scalar df_r = `e_df_r'
 	ereturn scalar r2_p = r2_p
 	ereturn scalar scale = scale 
+	ereturn scalar ssc = `factor'
+	if ("`dkraay'" != "") {
+		ereturn scalar df_k = `K_dk_full'
+		ereturn local vcetype "Driscoll-Kraay"
+		ereturn scalar dk_lags = `dk_lags'
+	}
+	else {
+		ereturn scalar df_k = `K'
+		if ("`cluster'" == "") {
+			ereturn local vcetype "robust"
+		}
+		else {
+			ereturn local vcetype "cluster-robust"
+		}
+	}
+	
     ereturn local depvar "`depv'"
     ereturn local indepvars "`indepv'"
     ereturn local cmd "robhdfe"
@@ -638,6 +740,18 @@ program define robhdfe, eclass sortpreserve
 	
 	di ""
 	di in green "Huber M-estimation with `eff'% normal efficiency and fixed effects"
+	if ("`cluster'" == "" & "`dkraay'" == "") {
+		di in green "Heteroskedasticity-robust standard errors" 
+	}
+	if (`nc' == 1){
+		di in green "Standard errors adjusted for clustering by `clusterdim1'" 
+	}
+	if (`nc' == 2){
+		di in green "Standard errors adjusted for clustering by `clusterdim1' and `clusterdim2'"
+	}
+	if ("`dkraay'" != "") {
+		di in green "Driscoll-Kraay standard errors (`dk_lags' lags)"		
+	}
 	di ""
 	di _column(51) in green "Number of obs = " %12.0fc in yellow e(N)
 	di _column(51) in green "Pseudo R2" _column(65) "= " %12.4f in yellow e(r2_p)
@@ -645,13 +759,13 @@ program define robhdfe, eclass sortpreserve
     ereturn display
     
 	if ("`weightvar'" != "") {
-		di in green "Robust weights stored in " in yellow "`weightvar'" 	
+		di in green "Robust regression weights stored in " in yellow "`weightvar'" 	
 	}
 	
 	if ("`replaceweightvar'" != "") {
 		di in green "Careful: " in yellow "`weightvar'" in green " already existed and now replaced with new data"
 	}
-	
+
 	di ""
 	di in green "Degrees of freedom used by FE:"
 	di "{hline 17}{c TT}{hline 36}{c TRC}"
@@ -676,8 +790,14 @@ program define robhdfe, eclass sortpreserve
 		di in green "* FE nested within cluster; treated as redundant for DoF calculation"
 	}
 	
-	matrix drop beta Vc Vclust b b0  
-	scalar drop df_initial eff mata_nclusters scale krob r2_p mu maxiter qhat Ibar k0
+	if "`dkraay'"=="" {
+		matrix drop beta Vc Vclust b b0  
+		scalar drop df_initial eff mata_nclusters scale krob r2_p mu maxiter qhat Ibar k0
+	}
+	else {
+		matrix drop beta Vc Vdk b b0  
+		scalar drop df_initial eff mata_ntime scale krob r2_p mu maxiter qhat Ibar k0 dk_lags
+	}
 
 	capture sum _temp_reghdfe_resid
 	if (_rc == 0) {
@@ -695,22 +815,19 @@ end
 mata:
 	void _vce_cluster() {
 
-		// Input variables:
-		real matrix y, Xr, r, cvar
-		real scalar scale, krob, mu, k, n, nc, nocluster
-		
-		// New variables:
-		real vector z, psi, phi, psii, z0, rho, rho0, psi2
-		real scalar i, r2_p
+		real vector r, cvar
+		real matrix Xr
+		real scalar scale, krob
+		real scalar k, n, nc, nocluster
+		real scalar i
+		real vector z, psi, phi, psii, psi2
 		real matrix XphiXinv, info, M, xi, Vclust
  
-		st_view(y = ., ., st_local("depv"), st_local("touse"))
 		st_view(Xr = ., ., tokens(st_local("indepvr")), st_local("touse"))
-		st_view(r = ., ., tokens(st_local("_resid_temp")), st_local("touse"))
-		st_view(cvar = ., ., tokens(st_local("cvar")), st_local("touse"))
+		st_view(r = ., ., st_local("_resid_temp"), st_local("touse"))
+		st_view(cvar = ., ., st_local("cvar"), st_local("touse"))
 		scale = st_numscalar("scale")		
 		krob = st_numscalar("krob")
-		mu = st_numscalar("mu")
 		nocluster = (st_local("nocluster") != "")
 		
 		// Process input:
@@ -747,16 +864,68 @@ mata:
 		// Export to Stata:
 		st_matrix("Vclust", Vclust)
 		st_numscalar("mata_nclusters", nc)
-
-		// Compute pseudo-R2:
-		z0 = (y :- mu) :/ scale
-		rho = mm_huber_rho(z, krob)			
-		rho0 = mm_huber_rho(z0, krob)
-		
-		r2_p = 1 - (colsum(rho) / colsum(rho0))
-		st_numscalar("r2_p", r2_p)
 	}
-	    
+	
+	void _vce_dkraay() {
+
+		real vector r, tvar
+		real matrix Xr
+		real scalar scale, krob, lags
+		real scalar k, nt
+		real scalar t, l, wl
+		real vector z, psi, phi
+		real matrix XphiXinv, info, M, S, Vdk, xrt
+		real vector psit, st, sl
+ 
+		st_view(Xr = ., ., tokens(st_local("indepvr")), st_local("touse"))
+		st_view(r = ., ., st_local("_resid_temp"), st_local("touse"))
+		st_view(tvar = ., ., st_local("tvar"), st_local("touse"))
+		scale = st_numscalar("scale")		
+		krob = st_numscalar("krob")
+		lags = st_numscalar("dk_lags")
+		
+		// Process input:
+		k = cols(Xr)
+		z = r:/scale
+		psi = mm_huber_psi(z,krob)
+		phi = mm_huber_phi(z,krob)	
+		
+		// Compute Driscoll-Kraay VCE:
+		XphiXinv = invsym(quadcross(Xr,phi,Xr))
+		
+		info = panelsetup(tvar, 1)
+        nt = rows(info)
+		
+		S = J(nt, k, 0)
+		for (t=1; t<=nt; t++) {
+			xrt = panelsubmatrix(Xr, t, info)
+			psit = panelsubmatrix(psi, t, info)
+			S[t,.] = (xrt' * psit)'
+		}
+		
+        M = J(k, k, 0)
+		for (t=1; t<=nt; t++) {
+			st = S[t,.]'
+			M = M + st * st'
+		}
+		
+		for (l=1; l<=lags; l++) {
+			wl = 1 - l/(lags+1)
+			for (t=l+1; t<=nt; t++) {
+				st = S[t,.]'
+				sl = S[t-l,.]'
+				M = M + wl * (st * sl' + sl * st')
+			}
+		}
+		
+		// Combine:
+		Vdk = makesymmetric(scale^2 * XphiXinv * M * XphiXinv)
+		
+		// Export to Stata:
+		st_matrix("Vdk", Vdk)
+		st_numscalar("mata_ntime", nt)
+	}
+    
 	void _scale_initial() {
 
 		real vector e, z, w
@@ -814,6 +983,28 @@ mata:
 			mu = mu_new
 		}
 		st_numscalar("mu", mu)
+	}
+
+	void _pseudo_r2() {
+
+		real vector y, r
+		real scalar scale, krob, mu
+		real vector z, z0, rho, rho0
+		real scalar r2_p
+ 
+		st_view(y = ., ., st_local("depv"), st_local("touse"))
+		st_view(r = ., ., st_local("_resid_temp"), st_local("touse"))
+		scale = st_numscalar("scale")		
+		krob = st_numscalar("krob")
+		mu = st_numscalar("mu")
+		
+		z = r:/scale
+		z0 = (y :- mu) :/ scale
+		rho = mm_huber_rho(z, krob)			
+		rho0 = mm_huber_rho(z0, krob)
+		
+		r2_p = 1 - (colsum(rho) / colsum(rho0))
+		st_numscalar("r2_p", r2_p)		
 	}
     
 end

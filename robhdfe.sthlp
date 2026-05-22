@@ -56,7 +56,7 @@
     {cmd:reghdfe}, the default is that singleton observations are dropped.
 
 {phang}
-    Standard errors can be clustered to account for dependence within (up to two) groups. Degrees-of-freedom and finite-sample 
+    Standard errors can be clustered to account for dependence within (up to two) groups. When standard errors are clustered, degrees-of-freedom and finite-sample 
     corrections follow the implementation in {cmd:reghdfe}.
 
 {phang}
@@ -78,6 +78,10 @@
 
 {phang}
 {opt cluster(varlist)} specifies variables to cluster the standard errors on. Up to two clustering dimensions are supported. If not specified, heteroskedasticity-robust standard errors are computed.
+
+{phang}
+{opt dkraay(varname #)} specifies that Driscoll-Kraay standard errors are computed using # lags, where {it:varname} should refer to the time dimension in the panel. May not be combined with {opt cluster()}. This 
+option does not correct the degrees-of-freedom adjustment for fixed effects that are nested within the time dimension (different from {cmd: reghdfe}, but similar to the {cmd: fixest} package in R).
 
 {phang}
 {opt tolerance(real)} sets the convergence tolerance for the IRWLS algorithm. Default is 1e-10. 
@@ -157,6 +161,9 @@
 {synopt:{cmd:e(df_r)}}residual degrees of freedom{p_end}
 {synopt:{cmd:e(r2_p)}}pseudo R-squared{p_end}
 {synopt:{cmd:e(scale)}}robust scale estimate{p_end}
+{synopt:{cmd:e(ssc)}}small-sample correction factor{p_end}
+{synopt:{cmd:e(df_k)}}number of estimated parameters using in small-sample correction{p_end}
+{synopt:{cmd:e(dk_lags)}}number of lags used for Driscoll-Kraay standard errors (if used){p_end}
 
 {synoptset 20 tabbed}{...}
 {p2col 5 20 24 2: Matrices}{p_end}
